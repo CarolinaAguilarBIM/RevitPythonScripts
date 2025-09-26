@@ -1,0 +1,135 @@
+"""
+Script Name: Place Unit Groups (No Rotation)
+Category: Automation
+Purpose: Automatically places model groups (units) into MEP spaces based on matching Unit.Type parameter — without rotation.
+Environment: Revit 2023+, IronPython 3.4.1, RevitPythonShell, .NET 4.6.2
+Functionality:
+- Reads all MEP spaces
+- Finds group type matching the space’s Unit.Type
+- Places the group at the space location
+- Transfers parameters (Unit.ID, Unit.Type, Unit.Level) from space to group
+- Logs skipped or problematic placements
+Inputs: Spaces with Unit.Type parameter, model groups named as Unit.Type
+Output: Groups placed with metadata populated
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+
+# Access RevitPythonShell built-in Revit context
+uidoc = __revit__.ActiveUIDocument
+if not uidoc:
+    raise Exception("No active Revit document found. Please open a project before running this script.")
+
+doc = uidoc.Document
+
+# Constants
+MAX_UNITS = 100  # Safety limit to prevent overload
+GROUP_PARAM_NAMES = ["Unit.Type", "Unit.Level", "Unit.ID"]
+
+# Helper Functions
+def get_spaces():
+    return FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).WhereElementIsNotElementType().ToElements()
+
+def get_group_type(unit_type_name):
+    if not unit_type_name:
+        return None
+    groups = FilteredElementCollector(doc).OfClass(GroupType).ToElements()
+    for g in groups:
+        if g.Name == unit_type_name:
+            return g
+    return None
+
+def get_space_location(space):
+    loc = space.Location
+    if hasattr(loc, 'Point'):
+        return loc.Point
+    return None
+
+def needs_mirroring(space):
+    # Placeholder for mirror logic - adjust based on your grid or layout logic
+    space_name = space.Name.lower()
+    return "mirror" in space_name
+
+def assign_parameters(group_instance, space):
+    for param_name in GROUP_PARAM_NAMES:
+        param = group_instance.LookupParameter(param_name)
+        if not param:
+            continue
+        if param_name == "Unit.Type":
+            source_param = space.LookupParameter("Unit.Type")
+            if source_param and source_param.HasValue:
+                val = source_param.AsString()
+                if val: param.Set(val)
+        elif param_name == "Unit.Level":
+            level = space.Level
+            if level: param.Set(level.Name)
+        elif param_name == "Unit.ID":
+            param.Set(str(space.Id.IntegerValue))
+
+def place_group(group_type, location, mirror=False):
+    group_instance = doc.Create.PlaceGroup(location, group_type)
+
+    if mirror:
+        mirror_line = Line.CreateUnbound(location, XYZ.BasisY)
+        ElementTransformUtils.MirrorElement(doc, group_instance.Id, mirror_line)
+
+    return group_instance
+
+# Main Script Execution
+spaces = get_spaces()
+placed_count = 0
+unmatched_types = set()
+missing_param_spaces = []
+
+trans = Transaction(doc, "Place Unit Groups")
+trans.Start()
+
+for space in spaces:
+    if placed_count >= MAX_UNITS:
+        print("Reached unit limit of {}. Stopping.".format(MAX_UNITS))
+        break
+
+    try:
+        unit_type_param = space.LookupParameter("Unit.Type")
+        if not unit_type_param or not unit_type_param.HasValue:
+            missing_param_spaces.append(space.Id.IntegerValue)
+            continue
+
+        unit_type = unit_type_param.AsString()
+        group_type = get_group_type(unit_type)
+
+        if not group_type:
+            unmatched_types.add(unit_type)
+            continue
+
+        location = get_space_location(space)
+        if not location:
+            continue
+
+        mirror = needs_mirroring(space)
+
+        group_instance = place_group(group_type, location, mirror)
+        assign_parameters(group_instance, space)
+
+        placed_count += 1
+
+    except Exception as e:
+        print("Error placing group in Space ID {}: {}".format(space.Id.IntegerValue, e))
+
+trans.Commit()
+
+if unmatched_types:
+    print("Missing group types for: {}".format(", ".join(filter(None, unmatched_types))))
+
+if missing_param_spaces:
+    print("Skipped {} spaces with missing or empty 'Unit.Type' parameter. IDs: {}".format(len(missing_param_spaces), missing_param_spaces))
+
+print("Successfully placed {} unit groups.".format(placed_count))

@@ -1,0 +1,84 @@
+"""
+Script Name: Group Member Debugger
+Category: Diagnostics
+Purpose: Lists all elements in a selected group to ensure space and family instances are present.
+Environment: Revit 2023.1, IronPython 3.4.1.1000, RevitPythonShell 2023.0.0.0, .NET 4.8
+Functionality:
+- Iterates through group members
+- Prints element category, type, and ID
+Inputs: Selected model group
+Output: Console report of group members
+Status: ✅ Working
+"""
+
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitServices')
+
+from Autodesk.Revit.DB import *
+from RevitServices.Persistence import DocumentManager
+
+# ✅ RPS-specific fallback
+doc = __revit__.ActiveUIDocument.Document
+uidoc = __revit__.ActiveUIDocument
+
+# Target model group name
+target_group_name = "S1.4B"
+
+# Find the model group by name
+group = None
+group_collector = FilteredElementCollector(doc).OfClass(Group)
+
+for g in group_collector:
+    if g.Name == target_group_name:
+        group = g
+        break
+
+if not group:
+    print("Group not found: {}".format(target_group_name))
+else:
+    print("Analyzing group: {}".format(group.Name))
+    group_members = group.GetMemberIds()
+
+    for eid in group_members:
+        el = doc.GetElement(eid)
+        if not el:
+            continue
+
+        el_type_name = el.GetType().Name
+        el_category = el.Category.Name if el.Category else "No Category"
+
+        # Host detection
+        host = getattr(el, "Host", None)
+        host_info = "None"
+        hosted_to_link = False
+
+        if host:
+            try:
+                host_info = "{} (Id: {})".format(host.GetType().Name, host.Id)
+                if isinstance(host, RevitLinkInstance):
+                    hosted_to_link = True
+            except:
+                host_info = "Host info unavailable"
+        
+        # Rotation test
+        rotatable = False
+        loc = el.Location
+        if isinstance(loc, LocationPoint):
+            try:
+                axis = Line.CreateBound(loc.Point, loc.Point + XYZ(0, 0, 10))
+                ElementTransformUtils.RotateElement(doc, el.Id, axis, 0.01)  # dry test
+                rotatable = True
+            except:
+                rotatable = False
+        else:
+            rotatable = False
+
+        # Output
+        print("-" * 40)
+        print("Element: {}".format(el.Name))
+        print("Category: {}".format(el_category))
+        print("Type: {}".format(el_type_name))
+        print("Host: {}".format(host_info))
+        print("Hosted to Link: {}".format(hosted_to_link))
+        print("Rotatable (Z-axis): {}".format(rotatable))

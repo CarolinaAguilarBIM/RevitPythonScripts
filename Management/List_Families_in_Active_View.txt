@@ -1,0 +1,58 @@
+"""
+Script Name: List Families in Active View
+Category: Management
+Purpose: Audits visible family instances in the active view, providing summaries for coordination or management.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell, .NET 4.0
+Functionality:
+- Collects all FamilyInstance elements in the active view
+- Prints element ID, category, family name, type name
+- Aggregates counts per category
+Inputs: Active view
+Output: Console summary with category counts
+Status: ✅ Working
+"""
+
+# Import Revit API
+from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
+
+# Get active document and view
+doc = __revit__.ActiveUIDocument.Document
+active_view = doc.ActiveView
+
+# Collect family instances in the active view
+collector = FilteredElementCollector(doc, active_view.Id).OfClass(FamilyInstance)
+
+print("Family Instances in View: {}".format(active_view.Name))
+print("=" * 60)
+
+# Dictionary to track counts per category
+category_counts = {}
+
+for inst in collector:
+    try:
+        # Family and type info
+        family_name = inst.Symbol.Family.Name
+        type_name_param = inst.Symbol.LookupParameter("Type Name")
+        type_name = type_name_param.AsString() if type_name_param else "<No Type Name>"
+
+        # Category info
+        category = inst.Category.Name if inst.Category else "<No Category>"
+
+        # Count per category
+        if category not in category_counts:
+            category_counts[category] = 0
+        category_counts[category] += 1
+
+        # Print instance details
+        print("ID: {} | Category: {} | Family: {} | Type: {}".format(
+            inst.Id.IntegerValue, category, family_name, type_name
+        ))
+
+    except Exception as e:
+        print("Skipped element {} due to error: {}".format(inst.Id, e))
+
+# Print summary
+print("\nSummary by Category")
+print("=" * 60)
+for cat, count in sorted(category_counts.items()):
+    print("Category: {:30} Count: {}".format(cat, count))

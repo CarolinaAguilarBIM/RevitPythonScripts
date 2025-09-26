@@ -1,0 +1,56 @@
+"""
+Script Name: List View Templates with Selected Parameters
+Category: Management
+Purpose: Audits key metadata on view templates for reporting and documentation.
+Environment: Revit 2024, IronPython 3.4.1.1000, RevitPythonShell, .NET 4.8
+Functionality:
+- Collects all view templates
+- Prints values of key parameters: View Classification, Copyright, Sub-discipline, Model Version
+Inputs: Active project
+Output: Console report of template metadata
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+
+from Autodesk.Revit.DB import FilteredElementCollector, View, BuiltInCategory
+from Autodesk.Revit.DB import ParameterType, StorageType, ElementParameterFilter, ElementId
+from Autodesk.Revit.UI import TaskDialog
+
+doc = __revit__.ActiveUIDocument.Document
+
+# List of parameter names to retrieve
+param_names = [
+    "View Classification",
+    "Copyright",
+    "Sub-discipline",
+    "Model Version"
+]
+
+def get_param_value(view, param_name):
+    param = view.LookupParameter(param_name)
+    if param and param.HasValue:
+        if param.StorageType == StorageType.String:
+            return param.AsString()
+        elif param.StorageType == StorageType.ElementId:
+            elem_id = param.AsElementId()
+            if not elem_id.Equals(ElementId.InvalidElementId):
+                return doc.GetElement(elem_id).Name
+        elif param.StorageType == StorageType.Integer:
+            return str(param.AsInteger())
+        elif param.StorageType == StorageType.Double:
+            return str(param.AsDouble())
+    return "N/A"
+
+# Collect all view templates
+collector = FilteredElementCollector(doc).OfClass(View)
+view_templates = [v for v in collector if v.IsTemplate]
+
+# Output
+print("Found {} view templates:\n".format(len(view_templates)))
+for view in view_templates:
+    print("View Template: {}".format(view.Name))
+    for pname in param_names:
+        value = get_param_value(view, pname)
+        print("  {}: {}".format(pname, value))
+    print("-" * 40)

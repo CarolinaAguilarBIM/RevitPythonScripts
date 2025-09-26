@@ -1,0 +1,70 @@
+"""
+Script Name: Annotate Family Names (GA)
+Category: QA/QC
+Purpose: Annotates family names next to generic annotations for quick QA/QC.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell 1.0.0.0, .NET 4.0
+Functionality:
+- Collects all generic annotations in the active view
+- Reads Family Name
+- Places a TextNote below each annotation
+- Supports default project text style or custom 3/32" Arial
+Inputs: Generic annotations in active view
+Output: TextNotes showing family names
+Status: ✅ Working
+"""
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+
+doc = __revit__.ActiveUIDocument.Document
+uidoc = __revit__.ActiveUIDocument
+view = doc.ActiveView
+
+# ------------------------------
+# CONFIGURATION
+USE_DEFAULT_STYLE = True   # Set to False if you want a custom "3/32\" Arial"
+TEXT_SIZE = 0.09375        # 3/32" in feet
+FONT_NAME = "Arial"
+# ------------------------------
+
+# Start a transaction
+t = Transaction(doc, "Add Family Names to Generic Annotations")
+t.Start()
+
+# Decide which TextNoteType to use
+def get_text_note_type():
+    if USE_DEFAULT_STYLE:
+        return doc.GetElement(doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType))
+    else:
+        text_note_types = FilteredElementCollector(doc).OfClass(TextNoteType)
+        for tnt in text_note_types:
+            size = tnt.get_Parameter(BuiltInParameter.TEXT_SIZE).AsDouble()
+            font = tnt.get_Parameter(BuiltInParameter.TEXT_FONT).AsString()
+            if abs(size - TEXT_SIZE) < 0.0001 and font == FONT_NAME:
+                return tnt
+        # fallback: modify the default
+        default_tnt = doc.GetElement(doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType))
+        default_tnt.get_Parameter(BuiltInParameter.TEXT_SIZE).Set(TEXT_SIZE)
+        default_tnt.get_Parameter(BuiltInParameter.TEXT_FONT).Set(FONT_NAME)
+        return default_tnt
+
+text_note_type = get_text_note_type()
+opts = TextNoteOptions(text_note_type.Id)
+opts.HorizontalAlignment = HorizontalTextAlignment.Left
+
+# Collect all Generic Annotations in the view
+collector = FilteredElementCollector(doc, view.Id).OfCategory(BuiltInCategory.OST_GenericAnnotation).WhereElementIsNotElementType()
+
+# Iterate and create notes with Family Name
+for inst in collector:
+    symbol = doc.GetElement(inst.GetTypeId())
+    fam = symbol.Family
+    family_name = fam.Name
+
+    loc = inst.Location
+    if hasattr(loc, 'Point'):
+        point = loc.Point
+        new_point = XYZ(point.X, point.Y - 0.2, point.Z)
+        TextNote.Create(doc, view.Id, new_point, family_name, opts)
+
+t.Commit()

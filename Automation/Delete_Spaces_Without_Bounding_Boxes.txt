@@ -1,0 +1,47 @@
+"""
+Script Name: Delete Spaces Without Bounding Boxes
+Category: Automation
+Purpose: Removes invalid or orphaned spaces from the project.
+Environment: Revit 2023.1, IronPython 3.4.1.1000, RevitPythonShell 2023.0.0.0, .NET 4.8
+Functionality:
+- Scans all Space elements in the project
+- Deletes any that do not have a valid BoundingBox
+Inputs: Active project
+Output: Console report of deleted spaces
+Status: ✅ Working
+"""
+
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+from System.Collections.Generic import List
+
+# Access active document
+uidoc = __revit__.ActiveUIDocument
+doc = uidoc.Document
+
+# Collect all spaces
+collector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).WhereElementIsNotElementType()
+spaces = collector.ToElements()
+
+# Prepare list of IDs to delete
+spaces_to_delete = List[ElementId]()
+
+for space in spaces:
+    bb = space.get_BoundingBox(None)
+    if bb is None:
+        print("🚫 Marking space for deletion: ID", space.Id.IntegerValue, "Name:", space.Name)
+        spaces_to_delete.Add(space.Id)
+
+# Delete in transaction
+if spaces_to_delete.Count > 0:
+    t = Transaction(doc, "Delete invalid spaces")
+    t.Start()
+    doc.Delete(spaces_to_delete)
+    t.Commit()
+    print("✅ Deleted", spaces_to_delete.Count, "spaces without bounding boxes.")
+else:
+    print("✅ No spaces without bounding boxes found.")

@@ -1,0 +1,91 @@
+"""
+Script Name: Color By Family Version
+Category: QA/QC
+Purpose: Visually distinguishes family instances in the active view based on the Family Version parameter.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell 1.0.0.0, .NET 4.0
+Functionality:
+- Scans all family instances in the active view
+- Overrides their color based on the last digit of Family Version
+  - -0 → Yellow
+  - -1 → Red
+  - -2 → Purple
+  - Anything else → Blue
+Inputs: Active view with family instances having Family Version parameter
+Output: Elements colored according to version
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+
+# Get doc + view
+doc = __revit__.ActiveUIDocument.Document
+view = __revit__.ActiveUIDocument.ActiveGraphicalView
+
+# Helper: Get solid DRAFTING fill pattern
+def get_solid_drafting_fill(doc):
+    fills = FilteredElementCollector(doc).OfClass(FillPatternElement)
+    for f in fills:
+        pattern = f.GetFillPattern()
+        if pattern.IsSolidFill and pattern.Target == FillPatternTarget.Drafting:
+            return f.Id
+    return ElementId.InvalidElementId
+
+solid_fill_id = get_solid_drafting_fill(doc)
+
+# Define colors
+color_yellow = Color(255, 255, 0)
+color_red    = Color(255, 0, 0)
+color_purple = Color(128, 0, 128)
+color_blue   = Color(0, 0, 255)
+
+# Create override settings
+def make_ogs(color):
+    ogs = OverrideGraphicSettings()
+    ogs.SetProjectionLineColor(color)
+    ogs.SetSurfaceForegroundPatternColor(color)
+    ogs.SetSurfaceForegroundPatternId(solid_fill_id)
+    return ogs
+
+# Map suffix to override
+version_colors = {
+    "-0": make_ogs(color_yellow),
+    "-1": make_ogs(color_red),
+    "-2": make_ogs(color_purple)
+}
+default_ogs = make_ogs(color_blue)
+
+# Collect all family instances in the active view
+collector = FilteredElementCollector(doc, view.Id).OfClass(FamilyInstance)
+
+# Start transaction
+t = Transaction(doc, "Color By Family Version")
+t.Start()
+
+# Apply color override based on Family Version
+for inst in collector:
+    symbol = inst.Symbol
+    param = symbol.LookupParameter("Family Version")
+    if param and param.HasValue:
+        val = param.AsString()
+        if val:
+            for key, ogs in version_colors.items():
+                if val.endswith(key):
+                    view.SetElementOverrides(inst.Id, ogs)
+                    break
+            else:
+                view.SetElementOverrides(inst.Id, default_ogs)
+        else:
+            view.SetElementOverrides(inst.Id, default_ogs)
+    else:
+        view.SetElementOverrides(inst.Id, default_ogs)
+
+t.Commit()
+
+
+print("✅ Color overrides applied to active view based on Family Version.")

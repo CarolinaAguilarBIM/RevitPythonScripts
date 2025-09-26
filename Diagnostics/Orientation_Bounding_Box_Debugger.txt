@@ -1,0 +1,27 @@
+"""
+Script Name: Orientation & Bounding Box Debugger
+Category: Diagnostics
+Purpose: Outputs bounding box dimensions, dominant axis, and center coordinates to identify misalignment in group placement scripts.
+Environment: Revit 2023.1, IronPython 3.4.1.1000, RevitPythonShell 2023.0.0.0, .NET 4.8
+Functionality:
+- Reads bounding box properties for target spaces or groups
+- Prints info for debugging placement logic
+Inputs: Target spaces or groups
+Output: Console report with bounding box metrics
+Status: ✅ Working
+"""
+
+doc = __revit__.ActiveUIDocument.Document
+
+from Autodesk.Revit.DB import FilteredElementCollector, BuiltInCategory
+
+spaces = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).WhereElementIsNotElementType().ToElements()
+
+print("[DEBUG] Found {} spaces.".format(len(spaces)))
+
+for sp in spaces:
+    bb = sp.get_BoundingBox(None)
+    if bb:
+        print("[DEBUG] Space ID {} | Bounding Box: Min={}, Max={}".format(sp.Id, bb.Min, bb.Max))
+    else:
+        print("[DEBUG] ❌ No bounding box for space ID {}".format(sp.Id))

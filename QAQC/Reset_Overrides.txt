@@ -1,0 +1,32 @@
+"""
+Script Name: Reset Overrides
+Category: QA/QC
+Purpose: Restores all elements in the active view to default visibility by clearing overrides.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell 1.0.0.0, .NET 4.0
+Functionality:
+- Clears all graphic overrides in the active view
+Inputs: Active view
+Output: Elements revert to default appearance
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+from Autodesk.Revit.DB import *
+
+doc = __revit__.ActiveUIDocument.Document
+view = __revit__.ActiveUIDocument.ActiveGraphicalView
+
+collector = FilteredElementCollector(doc, view.Id).WhereElementIsNotElementType()
+ogs_reset = OverrideGraphicSettings()
+
+t = Transaction(doc, "Reset Overrides")
+t.Start()
+
+for el in collector:
+    view.SetElementOverrides(el.Id, ogs_reset)
+
+t.Commit()

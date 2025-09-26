@@ -1,0 +1,58 @@
+"""
+Script Name: List All Parameters for View Templates
+Category: Management
+Purpose: Provides a full audit of all parameters for templates, supporting standards enforcement.
+Environment: Revit 2024, IronPython 3.4.1.1000, RevitPythonShell, .NET 4.8
+Functionality:
+- Prints all built-in, project, and shared parameters for each template
+- Handles different storage types (string, int, ElementId, None)
+Inputs: Active project
+Output: Console report of all template parameters
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+# Revit Python Shell script for IronPython 3.4.1
+
+from Autodesk.Revit.DB import FilteredElementCollector, View, StorageType, ElementId
+
+doc = __revit__.ActiveUIDocument.Document
+
+def get_parameter_value(param):
+    if not param or not param.HasValue:
+        return "N/A"
+    try:
+        if param.StorageType == StorageType.String:
+            return param.AsString()
+        elif param.StorageType == StorageType.ElementId:
+            elem_id = param.AsElementId()
+            if not elem_id.Equals(ElementId.InvalidElementId):
+                elem = doc.GetElement(elem_id)
+                return elem.Name if elem else "Invalid ElementId"
+            else:
+                return "None"
+        elif param.StorageType == StorageType.Integer:
+            return str(param.AsInteger())
+        elif param.StorageType == StorageType.Double:
+            return str(param.AsDouble())
+        else:
+            return "Unsupported"
+    except:
+        return "Error"
+
+# Collect all view templates
+view_templates = FilteredElementCollector(doc).OfClass(View).ToElements()
+view_templates = [v for v in view_templates if v.IsTemplate]
+
+print("Found {} view templates:\n".format(len(view_templates)))
+
+for view in view_templates:
+    print("View Template: {}\n{}".format(view.Name, "-" * 50))
+    for param in view.Parameters:
+        try:
+            param_name = param.Definition.Name
+            param_value = get_parameter_value(param)
+            print("  {}: {}".format(param_name, param_value))
+        except:
+            print("  Error reading parameter.")
+    print("\n" + "=" * 60 + "\n")

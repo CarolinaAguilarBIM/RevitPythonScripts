@@ -1,0 +1,33 @@
+"""
+Script Name: List All View Filters
+Category: QA/QC
+Purpose: Lists all view filter objects in the project for quick auditing.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell 1.0.0.0, .NET 4.0
+Functionality:
+- Collects all ParameterFilterElement (view filters) in the project
+- Prints each filter name to the console/log
+Inputs: Active project
+Output: Console/list of view filter names
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitAPIUI')
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+
+# Get current Revit document
+doc = __revit__.ActiveUIDocument.Document
+
+# Collect all view filters (ParameterFilterElement)
+filters = FilteredElementCollector(doc).OfClass(ParameterFilterElement).ToElements()
+
+# Print all filter names
+print("📋 View Filters in the current project:\n")
+for f in filters:
+    print("- {0}".format(f.Name))
+
+print("\n✅ Done! {0} filters found.".format(len(filters)))

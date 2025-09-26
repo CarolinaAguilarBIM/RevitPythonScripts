@@ -1,0 +1,43 @@
+"""
+Script Name: List Families and Types (Not Placed)
+Category: Management
+Purpose: Audits all family content in the project, even if not placed, for reporting or content verification.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell, .NET 4.0
+Functionality:
+- Iterates through all FamilySymbol elements
+- Prints family names and type names
+Inputs: Active project
+Output: Console report of all families and types
+Status: ✅ Working
+"""
+
+from Autodesk.Revit.DB import FilteredElementCollector, FamilySymbol
+
+doc = __revit__.ActiveUIDocument.Document
+
+collector = FilteredElementCollector(doc).OfClass(FamilySymbol)
+
+family_dict = {}
+
+for symbol in collector:
+    try:
+        # Get family name (safe)
+        family_name = symbol.FamilyName
+
+        # Workaround: Get type name from parameter instead of .Name
+        type_name_param = symbol.LookupParameter("Type Name")
+        type_name = type_name_param.AsString() if type_name_param else "<No Type Name>"
+
+        if family_name not in family_dict:
+            family_dict[family_name] = []
+
+        family_dict[family_name].append(type_name)
+
+    except Exception as e:
+        print("Skipped an element due to error: {}".format(e))
+
+# Print
+for fam_name in sorted(family_dict.keys()):
+    print("Family: {}".format(fam_name))
+    for t_name in sorted(family_dict[fam_name]):
+        print("  - Type: {}".format(t_name))

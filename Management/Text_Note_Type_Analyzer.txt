@@ -1,0 +1,59 @@
+"""
+Script Name: Text Note Type Analyzer
+Category: Management
+Purpose: Audits usage of TextNote types across views for standards compliance or reporting.
+Environment: Revit 2021, IronPython 2.7.7, RevitPythonShell, .NET 4.0
+Functionality:
+- Scans all TextNote elements in the project
+- Counts instances per TextNoteType (by Type Name)
+- Groups results by view title
+Inputs: Active project with TextNotes
+Output: Console summary of type usage per view
+Status: ✅ Working
+"""
+
+from Autodesk.Revit.DB import FilteredElementCollector, TextNote, BuiltInCategory
+
+# Target TextNoteType name (from parameter)
+target_type_name = '1/8" Arial Narrow-Underlined'
+
+# Collect all TextNote elements
+collector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TextNotes)
+
+# Initialize count storage
+view_text_note_count = {}
+total_count = 0
+
+for text_note in collector:
+    try:
+        # Get the TextNoteType
+        tntype = doc.GetElement(text_note.GetTypeId())
+        if tntype:
+            param = tntype.LookupParameter("Type Name")
+            if param and param.AsString() == target_type_name:
+                # Count the note
+                total_count += 1
+
+                # Get its view
+                view = doc.GetElement(text_note.OwnerViewId)
+                view_title = "Unknown View"
+                if view:
+                    try:
+                        view_title = view.Title
+                    except:
+                        view_title = "Unnamed View"
+
+                if view_title not in view_text_note_count:
+                    view_text_note_count[view_title] = 1
+                else:
+                    view_text_note_count[view_title] += 1
+    except Exception as e:
+        print("Error processing note ID {}: {}".format(text_note.Id, str(e)))
+
+# Output results
+print("--- Result Summary ---")
+print(target_type_name)
+print("Total Text notes: " + str(total_count))
+print("Reference views:")
+for view_title in sorted(view_text_note_count.keys()):
+    print(view_title + ": " + str(view_text_note_count[view_title]))

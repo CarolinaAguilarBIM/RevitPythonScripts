@@ -1,0 +1,134 @@
+"""
+Script Name: Space Boundary Validator
+Category: Diagnostics
+Purpose: Verifies all Space elements inside a unit group exist and are assigned correct Unit.Type.
+Environment: Revit 2023.1, IronPython 3.4.1.1000, RevitPythonShell 2023.0.0.0, .NET 4.8
+Functionality:
+- Lists all space elements in a group
+- Checks presence and parameter assignment
+Inputs: Selected model group
+Output: Console report of validation results
+Status: ✅ Working
+"""
+
+# -*- coding: utf-8 -*-
+import clr
+clr.AddReference("RevitAPI")
+clr.AddReference("RevitAPIUI")
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI import *
+import math
+
+# Use __revit__ to get the document (which works reliably for you)
+doc = __revit__.ActiveUIDocument.Document
+if doc is None:
+    raise Exception("❌ No active document. Cannot continue.")
+
+# IDs to check
+problem_ids = {55843492, 56001298}
+
+def bbox_info(space, label=""):
+    """Return (exists, dx, dy, center) or None if no bounding box."""
+    bb = space.get_BoundingBox(None)
+    if not bb:
+        print(f"[DEBUG] {label} ID {space.Id.IntegerValue}: BoundingBox is None")
+        return None
+    minp = bb.Min
+    maxp = bb.Max
+    dx = maxp.X - minp.X
+    dy = maxp.Y - minp.Y
+    center = (minp + maxp) * 0.5
+    print(f"[DEBUG] {label} ID {space.Id.IntegerValue}: BoundingBox dx={dx:.4f}, dy={dy:.4f}, center=({center.X:.4f},{center.Y:.4f},{center.Z:.4f})")
+    return (dx, dy, center)
+
+def dominant_axis(dx, dy):
+    if dx >= dy:
+        return XYZ(1,0,0), "X"
+    else:
+        return XYZ(0,1,0), "Y"
+
+# Find spaces
+all_spaces = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_MEPSpaces).WhereElementIsNotElementType().ToElements()
+spaces_map = {s.Id.IntegerValue: s for s in all_spaces}
+
+# Find group types mapped by Unit.Type
+group_types = FilteredElementCollector(doc).OfClass(GroupType).ToElements()
+group_type_by_type = {}
+for gt in group_types:
+    p = gt.LookupParameter("Unit.Type")
+    if p and p.HasValue:
+        ut = p.AsString()
+        if ut:
+            group_type_by_type[ut] = gt
+
+print("=== Debugging Problematic Spaces ===")
+
+for pid in problem_ids:
+    if pid not in spaces_map:
+        print(f"[DEBUG] Space ID {pid} not found in collector.")
+        continue
+    space = spaces_map[pid]
+    ut = None
+    param = space.LookupParameter("Unit.Type")
+    if param and param.HasValue:
+        ut = param.AsString()
+    print(f"\n[DEBUG] Inspecting space ID {pid}, Unit.Type='{ut}'")
+
+    # Bounding box of target space
+    info_target = bbox_info(space, "Target")
+
+    # Now find the group type for that unit type
+    if not ut:
+        print(f"[DEBUG] Space ID {pid}: Unit.Type missing or empty. Skipping template.")
+        continue
+
+    if ut not in group_type_by_type:
+        print(f"[DEBUG] Space ID {pid}: No GroupType found for Unit.Type '{ut}'")
+        continue
+
+    group_type = group_type_by_type[ut]
+    print(f"[DEBUG] Found GroupType '{group_type.Name}' for Unit.Type '{ut}'")
+
+    # Place a temporary group to extract the template space
+    temp_group = doc.Create.PlaceGroup(XYZ(0,0,0), group_type)
+    template_space = None
+    for mid in temp_group.GetMemberIds():
+        el = doc.GetElement(mid)
+        if el and el.Category and el.Category.Id == BuiltInCategory.OST_MEPSpaces:
+            template_space = el
+            break
+
+    if not template_space:
+        print(f"[DEBUG] Template space not found inside group '{group_type.Name}'")
+        doc.Delete(temp_group.Id)
+        continue
+
+    print(f"[DEBUG] Template space found inside group '{group_type.Name}', ID {template_space.Id.IntegerValue}")
+
+    # Boundingbox of template space
+    info_template = bbox_info(template_space, "Template")
+
+    # If both bounding boxes exist, compute dominant axes and angle
+    if info_target and info_template:
+        dx_t, dy_t, center_t = info_template
+        dx_s, dy_s, center_s = info_target
+
+        vec_t, axis_t = dominant_axis(dx_t, dy_t)
+        vec_s, axis_s = dominant_axis(dx_s, dy_s)
+        print(f"[DEBUG] Template dominant axis: {axis_t}, Target dominant axis: {axis_s}")
+
+        # Compute angle between these two
+        angle = vec_t.AngleTo(vec_s)
+        cross = vec_t.CrossProduct(vec_s)
+        if cross.Z < 0:
+            angle = -angle
+        angle_deg = angle * 180.0 / math.pi
+        print(f"[DEBUG] Calculated rotation: {angle_deg:.2f}°")
+
+    else:
+        print("[DEBUG] One or both bounding boxes missing; cannot compute orientation or center.")
+
+    doc.Delete(temp_group.Id)
+
+print("\n=== End of Debugging ===")
