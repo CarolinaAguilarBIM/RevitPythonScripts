@@ -18,6 +18,7 @@ Welcome to my collection of Revit Python scripts. These tools are designed to en
   - `List All Parameters for View Templates` – Audits all parameters in view templates.
   - `List Families and Types (Not Placed)` – Lists all family content in the project.
   - `List Families in Active View` – Lists visible family instances with category counts.
+  - `List All View Filters` – Lists all view filter objects in the project for quick auditing.
 
 - **Automation / Model Modification**
   - `Delete Spaces Without Bounding Boxes` – Cleans up invalid or orphaned spaces.
